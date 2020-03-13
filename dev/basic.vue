@@ -20,9 +20,13 @@
     span(slot="placeholder") a placeholder
 </template>
 
-<script lang="coffee">
-module.exports =
-  components:
-    "vc-textarea" : require "../src/textarea.vue"
+<script>
+import vcTextarea from "../src/textarea.vue";
+
+export default {
+  components: {
+    vcTextarea
+  }
+}
 
 </script>

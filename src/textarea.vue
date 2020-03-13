@@ -1,275 +1,422 @@
-// out: ..
 <template lang="pug">
-div(
-  v-bind:style="computedStyle",
-  @mousedown="onClick"
-  )
-  div(
-    v-el:sizer,
-    style="position:absolute;visibility:hidden;word-break:break-word;white-space:pre-wrap;overflow: auto",
-    v-bind:style="sizerStyle") {{value}}
+.vue-textarea(@mousedown="mousedown")
+  .sizer(ref="sizer" :style="sizerStyle") {{ value }}
   textarea(
-    v-model="value",
-    v-el:ta,
-    v-bind:style="taStyle",
-    v-bind:class="taclass",
-    v-bind:autofocus="autofocus",
-    v-bind:disabled="disabled",
-    v-bind:readonly="readonly",
+    :value="value",
+    ref="ta",
+    :style="taStyle",
+    :autofocus="autofocus",
+    :disabled="disabled",
+    :readonly="readonly",
     @mouseenter="mouseenter",
     @mouseleave="mouseleave",
     @focus="onFocus",
     @blur="onBlur",
     @keyup="onKeyup",
-    @input="onInput",
-    @scroll="onScroll",
-    style="resize:none;overflow:hidden")
+    @input="update",
+    @scroll="onScroll")
   slot(name="label")
-  div(
-    style="position:absolute;overflow:hidden",
-    v-if="!isOpened && value==''",
-    v-bind:style="sizerStyle",
-    v-show="loaded")
+  .placeholder(v-if="!isOpened && value==''" v-show="loaded" :style="sizerStyle")
     slot(name="placeholder")
-  div(
-    v-el:content,
-    style="position:absolute;visibility:hidden",
-    v-if="!loaded")
+  .content(v-if="!loaded" ref="content")
     slot
 </template>
 
-<script lang="coffee">
-module.exports =
+<script>
+import { isOpened2, style } from "./mixins.js";
 
-  mixins:[
-    require("vue-mixins/isOpened")
-    require("vue-mixins/style")
-  ]
+export default {
+  mixins: [isOpened2(), style()],
 
-  props:
-    "taclass":
-      default: -> []
-    "style":
-      default: -> []
-    "autofocus":
-      type: Boolean
+  props: {
+    autofocus: {
+      type: Boolean,
       default: false
-    "disabled":
-      type: Boolean
+    },
+    disabled: {
+      type: Boolean,
       default: false
-    "readonly":
-      type: Boolean
+    },
+    readonly: {
+      type: Boolean,
       default: false
-    "noExtraLine":
-      type: Boolean
+    },
+    noExtraLine: {
+      type: Boolean,
       default: false
-    "value":
-      type: String
+    },
+    value: {
+      type: String,
       default: ""
-    "transitionIn":
-      type: Function
-      default: ({el,style,cb}) ->
-        cb()
-    "transitionOut":
-      type: Function
-      default: ({el,style,cb}) ->
-        cb()
-    "maxSize":
-      type: Object
-      default: -> {}
-    "size":
-      type: Object
-      default: -> {}
-    "hoverSize":
-      type: Object
-      default: -> {}
+    },
+    transitionIn: {
+      type: Function,
+      default: () => callback()
+    },
+    transitionOut: {
+      type: Function,
+      default: () => callback()
+    },
+    maxSize: {
+      type: Object,
+      default: () => ({
+        height: undefined,
+        width: undefined
+      })
+    },
+    size: {
+      type: Object,
+      default: () => ({
+        height: undefined
+      })
+    },
+    hoverSize: {
+      type: Object,
+      default: () => ({
+        height: undefined
+      })
+    }
+  },
 
-  data: ->
-    content: {}
-    current:
-      width: null
-      height: null
-    loaded: false
-    hovered: false
-    tastyle: null
-    elstyle: null
+  data() {
+    return {
+      content: {},
+      current: {
+        width: undefined,
+        height: undefined
+      },
+      loaded: false,
+      hovered: false,
+      tastyle: undefined,
+      elstyle: undefined
+    };
+  },
 
-  computed:
-    inner: ->
-      return null unless @tastyle
-      inner = {}
-      for name in ["top","right","bottom","left"]
-        padding = parseFloat @tastyle.getPropertyValue("padding-#{name}").replace("px","")
-        border = parseFloat @tastyle.getPropertyValue("border-#{name}-width").replace("px","")
-        inner[name] = padding+border
-      return inner
-    sizerStyle: ->
-      return null unless @tastyle and @elstyle
-      style = {
-        fontSize: @tastyle.getPropertyValue("font-size")
-        lineHeight: @lineHeight + "px"
-        fontFamily: @tastyle.getPropertyValue("font-family")
-        letterSpacing: @tastyle.getPropertyValue("letter-spacing")
-        minHeight: @tastyle.getPropertyValue("min-height")
-        maxWidth: if @maxWidth? then @maxWidth + "px" else null
-        maxHeight: @maxHeight + "px"
-        paddingTop: @inner.top + "px"
-        paddingBottom: @inner.bottom + "px"
-        paddingLeft: @inner.left + "px"
-        paddingRight: @inner.right + "px"
-        top: @elstyle.getPropertyValue("padding-top")
-        left: @elstyle.getPropertyValue("padding-left")
-        marginTop: @tastyle.getPropertyValue("margin-top")
-        marginBottom: @tastyle.getPropertyValue("margin-bottom")
-        marginLeft: @tastyle.getPropertyValue("margin-left")
-        marginRight: @tastyle.getPropertyValue("margin-right")
-        boxSizing: @tastyle.getPropertyValue("box-sizing")
+  computed: {
+    inner() {
+      const inner = {
+        top: undefined,
+        bottom: undefined
+      };
+
+      if (this.tastyle) {
+        for (let name of ["top", "right", "bottom", "left"]) {
+          const padding = parseFloat(
+            this.tastyle.getPropertyValue(`padding-${name}`).replace("px", "")
+          );
+          const border = parseFloat(
+            this.tastyle
+              .getPropertyValue(`border-${name}-width`)
+              .replace("px", "")
+          );
+          inner[name] = padding + border;
+        }
       }
-      return style
-    lineHeight: ->
-      return null unless @tastyle
-      lh = @tastyle.getPropertyValue("line-height")
-      if lh == "normal"
-        return null
-      else
-        return parseFloat lh.replace("px","")
-    lineHeightOrFontSize: ->
-      if @lineHeight
-        return @lineHeight
-      else
-        return parseFloat @sizerStyle.fontSize.replace("px","")
-    maxWidth: ->
-      return @maxSize.width if @maxSize.width?
-      return null
-    maxHeight: ->
-      return @maxSize.height if @maxSize.height?
-      return null
-    closed: ->
-      height = @size.height
-      height ?= @$els.ta.offsetHeight
-      height = @maxheight if @maxheight? and height > @maxheight
-      width = @size.width
-      width ?= @$els.ta.offsetWidth
-      width = @maxWidth if @maxWidth? and width > @maxWidth
-      return width:width,height:height
-    taStyle: ->
-      return null unless @inner
+
+      return inner;
+    },
+    sizerStyle() {
+      if (!this.tastyle || !this.elstyle) {
+        return undefined;
+      }
+
+      const style = {
+        fontSize: this.tastyle.getPropertyValue("font-size"),
+        lineHeight: this.lineHeight + "px",
+        fontFamily: this.tastyle.getPropertyValue("font-family"),
+        letterSpacing: this.tastyle.getPropertyValue("letter-spacing"),
+        minHeight: this.tastyle.getPropertyValue("min-height"),
+        maxWidth: this.maxWidth ? this.maxWidth + "px" : undefined,
+        maxHeight: this.maxHeight + "px",
+        paddingTop: this.inner.top + "px",
+        paddingBottom: this.inner.bottom + "px",
+        paddingLeft: this.inner.left + "px",
+        paddingRight: this.inner.right + "px",
+        top: this.elstyle.getPropertyValue("padding-top"),
+        left: this.elstyle.getPropertyValue("padding-left"),
+        marginTop: this.tastyle.getPropertyValue("margin-top"),
+        marginBottom: this.tastyle.getPropertyValue("margin-bottom"),
+        marginLeft: this.tastyle.getPropertyValue("margin-left"),
+        marginRight: this.tastyle.getPropertyValue("margin-right"),
+        boxSizing: this.tastyle.getPropertyValue("box-sizing")
+      };
+
+      return style;
+    },
+    lineHeight() {
+      if (!this.tastyle) {
+        return undefined;
+      }
+
+      const lh = this.tastyle.getPropertyValue("line-height");
+      return lh === "normal" ? null : parseFloat(lh.replace("px", ""));
+    },
+    lineHeightOrFontSize() {
+      return this.lineHeight
+        ? this.lineHeight
+        : parseFloat(this.sizerStyle.fontSize.replace("px", ""));
+    },
+    maxWidth() {
+      return this.maxSize.width ? this.maxSize.width : undefined;
+    },
+    maxHeight() {
+      return this.maxSize.height ? this.maxSize.height : undefined;
+    },
+    closed() {
+      let { height } = this.size;
+      if (height == null) {
+        height = this.$refs.ta.offsetHeight;
+      }
+
+      if (this.maxheight && height > this.maxheight) {
+        height = this.maxheight;
+      }
+
+      let { width } = this.size;
+      if (width == null) {
+        width = this.$refs.ta.offsetWidth;
+      }
+
+      if (this.maxWidth && width > this.maxWidth) {
+        width = this.maxWidth;
+      }
+
       return {
-        height: @offsetHeight(@current.height) + "px"
-        width: @offsetWidth(@current.width) + "px"
-        visibility: if @loaded then null else "hidden"
-        overflow: if @opened then null else "hidden"
+        width,
+        height
+      };
+    },
+    taStyle() {
+      if (!this.inner) {
+        return undefined;
       }
-    mergeStyle: ->
-      return null unless @tastyle
+
       return {
-        position: "relative"
-        height: @current.height + "px"
-        width: if @maxWidth? then @maxWidth + "px" else null
+        height: this.offsetHeight(this.current.height) + "px",
+        width: this.offsetWidth(this.current.width) + "px",
+        visibility: this.loaded ? null : "hidden",
+        overflow: this.opened ? null : "hidden"
+      };
+    },
+    mergeStyle() {
+      if (!this.tastyle) {
+        return undefined;
       }
-  watch:
-    value: "valueChanged"
-  methods:
-    offsetHeight: (height = @height) -> height - @inner.top - @inner.bottom
-    offsetWidth: (width = @width) -> width - @inner.left - @inner.right
-    setCurrent: (style) ->
-      @current.height = style.height
-      @current.width = style.width
-    onClick: (e) ->
-      unless e.defaultPrevented
-        unless @opened or @value!=''
-          e.preventDefault()
-          @focus()
-        @open()
-    onFocus: (e) ->
-      @$emit "focus", e
-    onBlur: (e) ->
-      @close()
-      @$emit "blur", e
-    onScroll: (e) ->
-      @$emit "scroll", e
-    focus: ->
-      @open()
-      @$els.ta.focus()
-    blur: ->
-      @close()
-      @$els.ta.blur()
-    onKeyup: (e) ->
-      @$emit "keyup", e
-    onInput: (e) ->
-      e.stopPropagation()
-    mouseenter: ->
-      unless @opened
-        if @hoverSize.height > @hoverSize.height or @hoverSize.width > @closed.width
-          @hovered = true
-          @move(@hoverSize)
-    mouseleave: ->
-      if not @opened and @hovered
-        @move(@closed)
-    valueChanged: (value) ->
-      @$emit "input", value
-      @processContent(value)
-    processContent: (content) ->
-      @content.height = @$els.sizer.clientHeight
-      unless @noExtraLine
-        @content.height += @lineHeightOrFontSize
-      @content.height = @closed.height if @content.height < @closed.height
-      @content.height = @maxHeight if @maxHeight and @content.height > @maxHeight
-      @content.width = @$els.sizer.offsetWidth
-      @content.width = @closed.width if @content.width < @closed.width
-      @move(@content) if content and @opened # use transition
 
-    getOffsetStyle: (style) ->
-      return {height:@offsetHeight(style.height),width:@offsetWidth(style.width)}
+      return {
+        position: "relative",
+        height: this.current.height + "px",
+        width: this.maxWidth ? this.maxWidth + "px" : undefined
+      };
+    }
+  },
 
-    move: (style,cb) ->
-      area = @current.height * @current.width
-      newArea = style.height * style.width
-      if area == newArea
-        cb?()
-      else if area <= newArea
-        @transitionIn el:@$els.ta,style:@getOffsetStyle(style),cb: =>
-          @setCurrent(style)
-          cb?()
-      else
-        @transitionOut el:@$els.ta,style:@getOffsetStyle(style),cb: =>
-          @setCurrent(style)
-          cb?()
+  // watch: {
+  //   value(newValue) {
+  //     this.valueChanged(newValue);
+  //   }
+  // },
 
-    show: ->
-      @setOpened()
-      @$emit "before-enter"
-      @move @content, =>
-        @$emit "after-enter"
+  mounted() {
+    // if (!this.value) {
+    //   this.value = this.$refs.content
+    //     ? this.$refs.content.textContent
+    //     : undefined;
+    // }
+    this.tastyle = window.getComputedStyle(this.$refs.ta);
+    this.elstyle = window.getComputedStyle(this.$el);
+    this.processContent();
+    this.loaded = true;
+    return this.isOpened
+      ? this.setCurrent(this.content)
+      : this.setCurrent(this.closed);
+  },
 
-    hide: ->
-      @$emit "before-leave"
-      @move @closed, =>
-        @setClosed()
-        @$emit "after-leave"
+  methods: {
+    offsetHeight(height) {
+      if (height == null) {
+        ({ height } = this);
+      }
 
-    open: ->
-      return if @opened
-      @show()
+      return height - this.inner.top - this.inner.bottom;
+    },
+    offsetWidth(width) {
+      if (width == null) {
+        ({ width } = this);
+      }
 
-    close: ->
-      return unless @opened
-      @hide()
+      return width - this.inner.left - this.inner.right;
+    },
+    setCurrent(style) {
+      this.current.height = style.height;
+      return (this.current.width = style.width);
+    },
+    mousedown(e) {
+      if (!e.defaultPrevented) {
+        if (!this.opened && this.value === "") {
+          e.preventDefault();
+          this.focus();
+        }
 
-    toggle: ->
-      if @opened
-        @close()
-      else
-        @open()
+        return this.open();
+      }
+    },
+    onFocus(e) {
+      return this.$emit("focus", e);
+    },
+    onBlur(e) {
+      this.close();
+      return this.$emit("blur", e);
+    },
+    onScroll(e) {
+      return this.$emit("scroll", e);
+    },
+    focus() {
+      this.open();
+      return this.$refs.ta.focus();
+    },
+    blur() {
+      this.close();
+      return this.$refs.ta.blur();
+    },
+    onKeyup(e) {
+      return this.$emit("keyup", e);
+    },
+    mouseenter() {
+      if (!this.opened) {
+        if (
+          this.hoverSize.height > this.hoverSize.height ||
+          this.hoverSize.width > this.closed.width
+        ) {
+          this.hovered = true;
+          return this.move(this.hoverSize);
+        }
+      }
+    },
+    mouseleave() {
+      if (!this.opened && this.hovered) {
+        return this.move(this.closed);
+      }
+    },
+    update(event) {
+      this.$emit("input", event.target.value);
+      return this.processContent(event.target.value);
+      // return e.stopPropagation();
+    },
+    processContent(content) {
+      this.content.height = this.$refs.sizer.clientHeight;
+      if (!this.noExtraLine) {
+        this.content.height += this.lineHeightOrFontSize;
+      }
 
-  ready: ->
-    @value = @$els.content?.textContent unless @value
-    @tastyle = window.getComputedStyle(@$els.ta)
-    @elstyle = window.getComputedStyle(@$el)
-    @processContent()
-    @loaded = true
-    if @isOpened
-      @setCurrent(@content)
-    else
-      @setCurrent(@closed)
+      if (this.content.height < this.closed.height) {
+        this.content.height = this.closed.height;
+      }
+
+      if (this.maxHeight && this.content.height > this.maxHeight) {
+        this.content.height = this.maxHeight;
+      }
+
+      this.content.width = this.$refs.sizer.offsetWidth;
+
+      if (this.content.width < this.closed.width) {
+        this.content.width = this.closed.width;
+      }
+
+      if (content && this.opened) {
+        return this.move(this.content);
+      }
+    }, // use transition
+
+    getOffsetStyle(style) {
+      return {
+        height: this.offsetHeight(style.height),
+        width: this.offsetWidth(style.width)
+      };
+    },
+
+    move(style, callback) {
+      const area = this.current.height * this.current.width;
+      const newArea = style.height * style.width;
+      if (area === newArea) {
+        return typeof callback === "function" ? callback() : undefined;
+      } else if (area <= newArea) {
+        return this.transitionIn({
+          el: this.$refs.ta,
+          style: this.getOffsetStyle(style),
+          callback: () => {
+            this.setCurrent(style);
+            return typeof callback === "function" ? callback() : undefined;
+          }
+        });
+      } else {
+        return this.transitionOut({
+          el: this.$refs.ta,
+          style: this.getOffsetStyle(style),
+          callback: () => {
+            this.setCurrent(style);
+            return typeof callback === "function" ? callback() : undefined;
+          }
+        });
+      }
+    },
+
+    show() {
+      this.setOpened();
+      this.$emit("before-enter");
+      return this.move(this.content, () => this.$emit("after-enter"));
+    },
+
+    hide() {
+      this.$emit("before-leave");
+      return this.move(this.closed, () => {
+        this.setClosed();
+        return this.$emit("after-leave");
+      });
+    },
+
+    open() {
+      if (!this.opened) {
+        return this.show();
+      }
+    },
+
+    close() {
+      if (this.opened) {
+        return this.hide();
+      }
+    },
+
+    toggle() {
+      return this.opened ? this.close() : this.open();
+    }
+  }
+};
 </script>
+
+<style lang="scss">
+.vue-textarea {
+  .sizer {
+    position: absolute;
+    visibility: hidden;
+    word-break: break-word;
+    white-space: pre-wrap;
+    overflow: auto;
+  }
+
+  textarea {
+    resize: none;
+    overflow: hidden;
+  }
+
+  .content {
+    position: absolute;
+    visibility: hidden;
+  }
+
+  .placeholder {
+    position: absolute;
+    overflow: hidden;
+  }
+}
+</style>
