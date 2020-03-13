@@ -51,11 +51,11 @@ export default {
     },
     transitionIn: {
       type: Function,
-      default: () => callback()
+      default: ({ callback }) => callback()
     },
     transitionOut: {
       type: Function,
-      default: () => callback()
+      default: ({ callback }) => callback()
     },
     maxSize: {
       type: Object,
